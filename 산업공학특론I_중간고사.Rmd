@@ -1,6 +1,6 @@
 ---
 title: "산업공학특론I_중간고사"
-author: "제출자명 (학번)"
+author: "이승환 (2024122752)"
 date: "4/10/2024"
 output: html_document
 ---
@@ -69,7 +69,31 @@ knitr::opts_chunk$set(fig.width=12, fig.height=12)
 * 시각화 시 범주형 변수는 막대그래프로, 연속형 변수는 히스토그램으로 표현할 것
 
 ```{r no_1}
+dat <- read.csv('산업공학특론I_중간고사 데이터.csv')
+#활용하지 않는 변수 삭제
+dat<- subset(dat, select=-c(date, smv, wip, idle_time, idle_men, no_of_style_change, no_of_workers))
+#dat <- dat[,-(1:1)]
+#dat <- dat[,-(6:7)]
+#dat <- dat[,-(8:11)]
+head(dat) # Data 앞부분 확인하여 문자형 변수 확인
 
+#문자형 변수 범주형으로 변환
+dat$quarter <- as.factor(dat$quarter)
+dat$department <- as.factor(dat$department)
+dat$day <- as.factor(dat$day)
+
+draw_data <- function(x, title){ #x : 변수
+  if(is.factor(x)) { #범주형 변수 확인
+    barplot(table(x), col = 'blue', main = title, las = 1) #막대그래프, table():빈도
+  }
+  else {
+    hist(x, breaks = 20, col = 'blue', main = title, xlab = 'Value') #히스토그래프
+  }
+}
+
+for (i in 1:ncol(dat)){
+  draw_data(x=dat[,i], title=colnames(dat)[i]) 
+}
 ```
 
 <br>
@@ -82,6 +106,36 @@ knitr::opts_chunk$set(fig.width=12, fig.height=12)
 * 추정 결과에 따른 최적 분포를 도출하고, 그 근거를 제시할 것
 
 ```{r no_2}
+# MLE 추정 및 비교 문제. 최우추정법
+# 생산성 점수 (actual_productivity) 
+library(fitdistrplus)
+#norm_par <- fitdist(dat$actual_productivity, "norm")
+#gamma_par <- fitdist(dat$actual_productivity, "gamma")
+  
+fit_dist <- function(x){
+  fitlist <- c('exp', 'gamma', 'norm')
+  
+  fit_result <- matrix(nrow = 3, ncol = length(fitlist))
+  colnames(fit_result) <- fitlist
+  rownames(fit_result) <- c('P1', 'P2', 'loglik')
+
+  for(i in 1:length(fitlist)){
+    fit_temp <- fitdist(dat$actual_productivity, fitlist[i]) # MLE 추정 함수 사용
+  
+    est_temp <- fit_temp$estimate
+    if (length(est_temp) == 1) { # 지수분포에서는 estimate 1개이므로, 빈칸은 NA 처리.
+      est_temp <- c(est_temp, NA) 
+    }
+
+    ll_temp <- fit_temp$loglik
+  
+    fit_result[,i] = c(est_temp, ll_temp)
+  }
+  print(fit_result) # 모수 추정 결과 도출
+}
+
+fit_dist(dat$actual_productivity)
+
 
 ```
 

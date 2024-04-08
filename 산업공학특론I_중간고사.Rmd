@@ -75,7 +75,9 @@ dat<- subset(dat, select=-c(date, smv, wip, idle_time, idle_men, no_of_style_cha
 #dat <- dat[,-(1:1)]
 #dat <- dat[,-(6:7)]
 #dat <- dat[,-(8:11)]
+dat$department <- gsub(' ','',dat$department)
 head(dat) # Data 앞부분 확인하여 문자형 변수 확인
+
 
 #문자형 변수 범주형으로 변환
 dat$quarter <- as.factor(dat$quarter)
@@ -84,10 +86,10 @@ dat$day <- as.factor(dat$day)
 
 draw_data <- function(x, title){ #x : 변수
   if(is.factor(x)) { #범주형 변수 확인
-    barplot(table(x), col = 'blue', main = title, las = 1) #막대그래프, table():빈도
+    barplot(table(x), col = 'grey', main = title, las = 1) #막대그래프, table():빈도
   }
   else {
-    hist(x, breaks = 20, col = 'blue', main = title, xlab = 'Value') #히스토그래프
+    hist(x, breaks = 20, col = 'grey', main = title, xlab = 'Value') #히스토그래프
   }
 }
 
@@ -115,12 +117,12 @@ library(fitdistrplus)
 fit_dist <- function(x){
   fitlist <- c('exp', 'gamma', 'norm')
   
-  fit_result <- matrix(nrow = 3, ncol = length(fitlist))
+  fit_result <- matrix(nrow = 5, ncol = length(fitlist))
   colnames(fit_result) <- fitlist
-  rownames(fit_result) <- c('P1', 'P2', 'loglik')
+  rownames(fit_result) <- c('P1', 'P2', 'loglik', 'AIC', 'BIC')
 
   for(i in 1:length(fitlist)){
-    fit_temp <- fitdist(dat$actual_productivity, fitlist[i]) # MLE 추정 함수 사용
+    fit_temp <- fitdist(x, fitlist[i]) 
   
     est_temp <- fit_temp$estimate
     if (length(est_temp) == 1) { # 지수분포에서는 estimate 1개이므로, 빈칸은 NA 처리.
@@ -128,16 +130,28 @@ fit_dist <- function(x){
     }
 
     ll_temp <- fit_temp$loglik
-  
-    fit_result[,i] = c(est_temp, ll_temp)
+    AIC_temp <- fit_temp$aic
+    BIC_temp <- fit_temp$bic
+    
+    fit_result[,i] = c(est_temp, ll_temp, AIC_temp, BIC_temp)
   }
-  print(fit_result) # 모수 추정 결과 도출
+  print(fit_result) # 추정 결과 도출
+  
+  best_ll <- colnames(fit_result)[which.max(fit_result[3,])]
+  best_AIC <- colnames(fit_result)[which.min(fit_result[4,])]
+  best_BIC <- colnames(fit_result)[which.min(fit_result[5,])]
+  
+  print(paste('로그우도 기반 적합 분포 : ', best_ll))
+  print(paste('AIC 값   기반 적합 분포 : ', best_AIC))
+  print(paste('BIC 값   기반 적합 분포 : ', best_BIC))
 }
 
 fit_dist(dat$actual_productivity)
 
 
 ```
+#### -> 추정 결과에 따라 최적의 분포로 '정규 분포' 도출.
+###### : 정규분포에서 가장 큰 로그우도 값을 보이고, AIC, BIC 값이 가장 작은 값을 보이고 있으므로 최적의 분포로 도출됨.
 
 <br>
 <br>
@@ -148,8 +162,15 @@ fit_dist(dat$actual_productivity)
 * 단순 도시가 아닌 도시 결과에 대한 해석 결과를 설명하고, 결론을 도출할 것
 
 ```{r no_3}
+x <- dat$actual_productivity
+fit <- fitdist(x, 'norm')
 
+fit_mean <- fit$estimate[1]
+fit_sd <- fit$estimate[2]
 
+hist(x, freq = FALSE, col = 'grey', breaks = 5, prob = T, main = 'Density of Productivity Data', xlab = "Actual Productivity", ylab = "Density")
+curve(dnorm(x, mean = fit_mean, sd = fit_sd, log=F), col = 'blue', add = T, lwd = 2, yaxt = "n")
+legend("topright", legend = c("Actual", "Estimated"), col = c("grey", "blue"), lty = 1, lwd = 2)
 ```
 
 <br>
@@ -161,6 +182,23 @@ fit_dist(dat$actual_productivity)
 * 기술통계량 검토 결과를 해석하여 본인의 생각과 결론을 글로 작성할 것
 
 ```{r no_4}
+grp_target <- function(x=dat$targeted_productivity, grp) {
+  dat_split <- split(x, grp)
+  print(lapply(dat_split, summary))
+}
+
+grp_actual <- function(x=dat$actual_productivity, grp) {
+  dat_split <- split(x, grp)
+  print(lapply(dat_split, summary))
+}
+
+for(i in 1:3){
+  cat(paste('##############', colnames(dat)[i],'##############\n'))
+  cat('### 목표 점수 ###\n')
+  grp_target(grp=dat[,i])
+  cat('### 생산성 점수 ###\n')
+  grp_actual(grp=dat[,i])
+}
 
 
 ```
@@ -174,9 +212,25 @@ fit_dist(dat$actual_productivity)
 * 모평균 검정 시 모분산은 알려지지 않았으며, 부서별 생산성 점수의 모분산은 다르다고 가정
 
 ```{r no_5}
+## 모분산에 대해 알려져있지 않으므로 T분포로 진행.
+## 1. 모평균 가설 검정
+## H0 : 부서별로 실제 생산성 점수의 평균은 같다.
+## H1 : 부서별로 실제 생산성 점수의 평균은 같지 않다.
+## 유의수준 설정 (a = 0.01)
+dat_depart <- split(dat$actual_productivity, dat$department)
+sweing <- dat_depart$sweing;
+inishing <- dat_depart$finishing
+t.test(sweing, finishing, conf.level = 0.99, var.equal = FALSE) 
+# 검정 수행 결과 P-Value = 0.003458이며,
+# H0 귀무가설 한다.
 
-
-
+## 2. 모분산 가설 검정
+## H0 : 부서별로 실제 생산성 점수의 편차는 같다.
+## H1 : 부서별로 실제 생산성 점수의 편차는 같지 않다.
+## 유의수준 설정 (a = 0.01)
+var.test(sweing, finishing, conf.level = 0.99)
+# 검정 수행 결과 P-Value = 4.271e-09 이며, 
+# H0 귀무가설 한다. 
 ```
 
 <br>
@@ -187,8 +241,22 @@ fit_dist(dat$actual_productivity)
 * 부서별 전체 데이터 중 목표 생산성 점수가 실제 생산성 점수를 초과하는 비율이 같은지 비교할 것
 
 ```{r no_6}
+## 1. 모평균 가설 검정
+## H0 : 부서관계 없이 실제 생산성 점수가 목표 생산성 점수 초과하는 비율이 같다.
+## H1 : 부서별로 실제 생산성 점수가 목표 생산성 점수 초과하는 비율이 다르다.
+## 유의수준 설정 (a = 0.05)
 
+dat_actual <- split(dat$actual_productivity, dat$department)
+dat_target <- split(dat$targeted_productivity, dat$department)
 
+ndat <- sapply(dat_actual, length)
+np <- sapply(1:length(dat_actual), function(x) {
+  actual <- dat_actual[[x]]
+  target <- dat_target[[x]]
+  return(sum(actual > target))
+})
+
+prop.test(np, ndat)
 ```
 
 <br>

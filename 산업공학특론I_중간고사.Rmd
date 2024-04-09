@@ -75,7 +75,7 @@ dat<- subset(dat, select=-c(date, smv, wip, idle_time, idle_men, no_of_style_cha
 #dat <- dat[,-(1:1)]
 #dat <- dat[,-(6:7)]
 #dat <- dat[,-(8:11)]
-dat$department <- gsub(' ','',dat$department)
+dat$department <- gsub(' ','',dat$department) # 'finishing '처리
 head(dat) # Data 앞부분 확인하여 문자형 변수 확인
 
 
@@ -115,7 +115,7 @@ library(fitdistrplus)
 #gamma_par <- fitdist(dat$actual_productivity, "gamma")
   
 fit_dist <- function(x){
-  fitlist <- c('exp', 'gamma', 'norm')
+  fitlist <- c('exp', 'gamma', 'norm', 'weibull')
   
   fit_result <- matrix(nrow = 5, ncol = length(fitlist))
   colnames(fit_result) <- fitlist
@@ -150,8 +150,8 @@ fit_dist(dat$actual_productivity)
 
 
 ```
-#### -> 추정 결과에 따라 최적의 분포로 '정규 분포' 도출.
-###### : 정규분포에서 가장 큰 로그우도 값을 보이고, AIC, BIC 값이 가장 작은 값을 보이고 있으므로 최적의 분포로 도출됨.
+#### -> 추정 결과에 따라 최적의 분포로 '와이블 분포' 도출.
+###### : 와이블 분포에서 가장 큰 로그우도 값을 보이고, AIC, BIC 값이 가장 작은 값을 보이고 있으므로 최적의 분포로 도출됨.
 
 <br>
 <br>
@@ -163,14 +163,18 @@ fit_dist(dat$actual_productivity)
 
 ```{r no_3}
 x <- dat$actual_productivity
-fit <- fitdist(x, 'norm')
+fit <- fitdist(x, 'weibull')
 
 fit_mean <- fit$estimate[1]
 fit_sd <- fit$estimate[2]
 
-hist(x, freq = FALSE, col = 'grey', breaks = 5, prob = T, main = 'Density of Productivity Data', xlab = "Actual Productivity", ylab = "Density")
-curve(dnorm(x, mean = fit_mean, sd = fit_sd, log=F), col = 'blue', add = T, lwd = 2, yaxt = "n")
+hist(x, freq = FALSE, col = 'grey', breaks = 20, prob = T, main = 'Density of Productivity Data', xlab = "Actual Productivity", ylab = "Density")
+curve(dweibull(x, shape = 2, scale = 1), col = 'blue', add = T, lwd = 2, yaxt = "n")
 legend("topright", legend = c("Actual", "Estimated"), col = c("grey", "blue"), lty = 1, lwd = 2)
+
+plot(fitdist(dat$actual_productivity, 'weibull'))
+
+
 ```
 
 <br>
@@ -200,7 +204,6 @@ for(i in 1:3){
   grp_actual(grp=dat[,i])
 }
 
-
 ```
 
 <br>
@@ -218,8 +221,8 @@ for(i in 1:3){
 ## H1 : 부서별로 실제 생산성 점수의 평균은 같지 않다.
 ## 유의수준 설정 (a = 0.01)
 dat_depart <- split(dat$actual_productivity, dat$department)
-sweing <- dat_depart$sweing;
-inishing <- dat_depart$finishing
+sweing <- dat_depart$sweing
+finishing <- dat_depart$finishing
 t.test(sweing, finishing, conf.level = 0.99, var.equal = FALSE) 
 # 검정 수행 결과 P-Value = 0.003458이며,
 # H0 귀무가설 한다.
@@ -269,12 +272,29 @@ prop.test(np, ndat)
 
 
 ```{r no_7}
+## 1. 모평균 가설 검정
+## H0 : 생산 공정에 투입되는 인원이 요일에 관계없이 동일하다.
+## H1 : 생산 공정에 투입되는 인원이 요일별로 다르다.
+## 유의수준 설정 (a = 0.05)
+tapply(dat$team, dat$day, mean)
 
+dat_table <- function(x){
+  ob <- table(x)
+  ex <- rep(mean(ob), length(ob))
+  chisq.test(rbind(ob,ex))
+}
+
+chisq_test <- print(dat_table(dat$day))
+
+#if (chi_test$p.value < 0.05) {
+#  cat(paste('##############', colnames(dat)[i],'##############/n'))
+ # print(chi_test)
+#}
 
 ```
 
 
-<br>
+d<br>
 <br>
 
 #### 8. 초과근무 시간 (over_time)과 성과급 (incentive)이 연관성이 있는지 가설검정을 통하여 확인하고자 한다. 신뢰수준 90%에서 가설검정을 수행하고, 이에 대한 결론을 도출하시오. (15점)
@@ -284,7 +304,26 @@ prop.test(np, ndat)
 * 검정을 위한 테이블은 5행 5열로 구성할 것
 
 ```{r no_8}
+# 이상치 배제를 위한 데이터 전처리 진행
+dat <- dat[!(dat$incentive > 80 ), ]
+dat <- dat[!(dat$over_time > 8000 ), ]
+# 연속형 변수의 경우, 이산화를 진행하여 변수를 처리해주어야 함
+# 검정을 위한 테이블은 5행 5열로 구성할 것
+grp_incen <- function(x){
+  cut(x,breaks=c(0, 16, 32, 48, 64, 80), include.lowest=T)
+}
+grp_over <- function(x){
+  cut(x,breaks=c(0, 1600, 3200, 4800, 6400, 8000), include.lowest=T)
+}
+dat$incentive <- grp_incen(dat$incentive)
+dat$over_time <- grp_over(dat$over_time)
 
+## 1. 모평균 가설 검정
+## H0 : 초과근무 시간 (over_time)과 성과급 (incentive) 변수 사이에는 연관성이 없다.
+## H1 : 초과근무 시간 (over_time)과 성과급 (incentive) 변수 사이에는 연관성이 있다.
+## 2. 유의수준 설정 (a = 0.1)
 
+chi_test <- chisq.test(table(dat$over_time, dat$incentive))
+print(chi_test)
 ```
 

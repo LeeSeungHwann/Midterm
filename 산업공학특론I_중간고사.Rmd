@@ -69,22 +69,22 @@ knitr::opts_chunk$set(fig.width=12, fig.height=12)
 * 시각화 시 범주형 변수는 막대그래프로, 연속형 변수는 히스토그램으로 표현할 것
 
 ```{r no_1}
+# 데이터 탐색 및 전처리 수행
+
+# 데이터 로드
 dat <- read.csv('산업공학특론I_중간고사 데이터.csv')
-#활용하지 않는 변수 삭제
-dat<- subset(dat, select=-c(date, smv, wip, idle_time, idle_men, no_of_style_change, no_of_workers))
-#dat <- dat[,-(1:1)]
-#dat <- dat[,-(6:7)]
-#dat <- dat[,-(8:11)]
+
+# 활용하지 않는 변수 삭제 및 변수내 값 정리
+dat <- subset(dat, select = -c(date, smv, wip, idle_time, idle_men, no_of_style_change, no_of_workers))
 dat$department <- gsub(' ','',dat$department) # 'finishing '처리
-head(dat) # Data 앞부분 확인하여 문자형 변수 확인
 
-
-#문자형 변수 범주형으로 변환
+# 문자형 변수 범주형으로 변환
 dat$quarter <- as.factor(dat$quarter)
 dat$department <- as.factor(dat$department)
 dat$day <- as.factor(dat$day)
 
-draw_data <- function(x, title){ #x : 변수
+# 데이터 시각화 수행
+draw_data <- function(x, title){
   if(is.factor(x)) { #범주형 변수 확인
     barplot(table(x), col = 'grey', main = title, las = 1) #막대그래프, table():빈도
   }
@@ -92,7 +92,6 @@ draw_data <- function(x, title){ #x : 변수
     hist(x, breaks = 20, col = 'grey', main = title, xlab = 'Value') #히스토그래프
   }
 }
-
 for (i in 1:ncol(dat)){
   draw_data(x=dat[,i], title=colnames(dat)[i]) 
 }
@@ -108,12 +107,12 @@ for (i in 1:ncol(dat)){
 * 추정 결과에 따른 최적 분포를 도출하고, 그 근거를 제시할 것
 
 ```{r no_2}
-# MLE 추정 및 비교 문제. 최우추정법
-# 생산성 점수 (actual_productivity) 
+# 생산성 점수 (actual_productivity) MLE 추정 및 비교
+
+# 확률 분포 관련 라이브러리 로드
 library(fitdistrplus)
-#norm_par <- fitdist(dat$actual_productivity, "norm")
-#gamma_par <- fitdist(dat$actual_productivity, "gamma")
-  
+
+# 확률 분포 추정 함수 생성
 fit_dist <- function(x){
   fitlist <- c('exp', 'gamma', 'norm', 'weibull')
   
@@ -123,7 +122,6 @@ fit_dist <- function(x){
 
   for(i in 1:length(fitlist)){
     fit_temp <- fitdist(x, fitlist[i]) 
-  
     est_temp <- fit_temp$estimate
     if (length(est_temp) == 1) { # 지수분포에서는 estimate 1개이므로, 빈칸은 NA 처리.
       est_temp <- c(est_temp, NA) 
@@ -135,7 +133,8 @@ fit_dist <- function(x){
     
     fit_result[,i] = c(est_temp, ll_temp, AIC_temp, BIC_temp)
   }
-  print(fit_result) # 추정 결과 도출
+  
+  print(fit_result) # 추정 결과 출력
   
   best_ll <- colnames(fit_result)[which.max(fit_result[3,])]
   best_AIC <- colnames(fit_result)[which.min(fit_result[4,])]
@@ -146,11 +145,12 @@ fit_dist <- function(x){
   print(paste('BIC 값   기반 적합 분포 : ', best_BIC))
 }
 
+# 생산성 점수에 적합한 분포 탐색
 fit_dist(dat$actual_productivity)
 
 
 ```
-#### -> 추정 결과에 따라 최적의 분포로 '와이블 분포' 도출.
+#### -> 확률 분포 추정 결과에 따라 최적의 분포로 '와이블 분포' 도출.
 ###### : 와이블 분포에서 가장 큰 로그우도 값을 보이고, AIC, BIC 값이 가장 작은 값을 보이고 있으므로 최적의 분포로 도출됨.
 
 <br>
@@ -162,20 +162,23 @@ fit_dist(dat$actual_productivity)
 * 단순 도시가 아닌 도시 결과에 대한 해석 결과를 설명하고, 결론을 도출할 것
 
 ```{r no_3}
+# MLE 추정 결과 시각화
+
+# weibull 분포 MLE 추정
 x <- dat$actual_productivity
 fit <- fitdist(x, 'weibull')
 
-fit_mean <- fit$estimate[1]
-fit_sd <- fit$estimate[2]
+fit_shape <- fit$estimate[1]
+fit_scale <- fit$estimate[2]
 
-hist(x, freq = FALSE, col = 'grey', breaks = 20, prob = T, main = 'Density of Productivity Data', xlab = "Actual Productivity", ylab = "Density")
-curve(dweibull(x, shape = 2, scale = 1), col = 'blue', add = T, lwd = 2, yaxt = "n")
-legend("topright", legend = c("Actual", "Estimated"), col = c("grey", "blue"), lty = 1, lwd = 2)
-
-plot(fitdist(dat$actual_productivity, 'weibull'))
-
+# 실제 데이터 히스토그램 및 MLE 모수로 가지는 분포 시각화
+hist(x, col = 'grey', breaks = 20, prob = T, main = 'Density of Productivity Data', xlab = "Actual Productivity", ylab = "Density")
+curve(dweibull(x, shape = fit_shape, scale = fit_scale), col = 'blue', add = T)
+legend('topright', legend = c("Actual", 'weibull'), col = c('grey', 'blue'), lwd = 2)
 
 ```
+#### -> MLE로 추정된 형상 모수와 척도 모수가 적용된 와이블 분포에서 오른쪽 꼬리가 두터워지는 모양을 보이고 있으며, 는 실제 데이터의 분포와 유사하다.
+###### : 실제 생산성 점수 (actual_productivity)의 데이터 분석 진행할 때 와이블 분포를 활용할 수 있다는 결론을 내릴 수 있다.
 
 <br>
 <br>
@@ -186,16 +189,19 @@ plot(fitdist(dat$actual_productivity, 'weibull'))
 * 기술통계량 검토 결과를 해석하여 본인의 생각과 결론을 글로 작성할 것
 
 ```{r no_4}
+# 기술통계량 검토
+
+# 목표 점수에 대한 데이터 그룹화 및 기술 통계량 출력
 grp_target <- function(x=dat$targeted_productivity, grp) {
   dat_split <- split(x, grp)
   print(lapply(dat_split, summary))
 }
-
+# 생산성 점수에 대한 데이터 그룹화 및 기술 통계량 출력
 grp_actual <- function(x=dat$actual_productivity, grp) {
   dat_split <- split(x, grp)
   print(lapply(dat_split, summary))
 }
-
+# 주차, 부서, 요일 각각의 기술 통계량 결과 도출
 for(i in 1:3){
   cat(paste('##############', colnames(dat)[i],'##############\n'))
   cat('### 목표 점수 ###\n')
@@ -205,7 +211,7 @@ for(i in 1:3){
 }
 
 ```
-
+#### -> 분기별로 생산성 점수를 비교했을때, 3/4 quarter에서 목표했던 수치를 달성하지 못했으며, 부서별로 데이터를 비교하였을때는 finishing 부서에서 높은 점수를 받았다. 요일별로 점수를 비교하였을때 요일별로 모두 기준을 달성한 것으로 보인다.
 <br>
 <br>
 
@@ -216,24 +222,52 @@ for(i in 1:3){
 
 ```{r no_5}
 ## 모분산에 대해 알려져있지 않으므로 T분포로 진행.
-## 1. 모평균 가설 검정
+## 1. 모평균 가설 설정
 ## H0 : 부서별로 실제 생산성 점수의 평균은 같다.
 ## H1 : 부서별로 실제 생산성 점수의 평균은 같지 않다.
-## 유의수준 설정 (a = 0.01)
+
+## 2. 유의수준 설정 (a = 0.01)
+alpha_t <- 0.01
+
+## 3. 기각역 설정
+## Z0 < -Z0.005 or Z0 > Z0.005
+
+## 4. 검정 통계량 계산
 dat_depart <- split(dat$actual_productivity, dat$department)
 sweing <- dat_depart$sweing
 finishing <- dat_depart$finishing
-t.test(sweing, finishing, conf.level = 0.99, var.equal = FALSE) 
-# 검정 수행 결과 P-Value = 0.003458이며,
-# H0 귀무가설 한다.
+result_t <- t.test(sweing, finishing, conf.level = 0.99, var.equal = FALSE)
+result_t
 
-## 2. 모분산 가설 검정
+## 5. 결론 도출
+if(result_t$p.value < alpha_t) {
+  print('검정 수행 결과 귀무 가설 기각한다.')
+} else {
+  print('검정 수행 결과 귀무 가설 채택한다.')
+}
+
+
+## 모분산 가설 검정
+## 1. 가설 설정
 ## H0 : 부서별로 실제 생산성 점수의 편차는 같다.
 ## H1 : 부서별로 실제 생산성 점수의 편차는 같지 않다.
-## 유의수준 설정 (a = 0.01)
-var.test(sweing, finishing, conf.level = 0.99)
-# 검정 수행 결과 P-Value = 4.271e-09 이며, 
-# H0 귀무가설 한다. 
+
+## 2. 유의수준 설정 (a = 0.01)
+alpha_var <- 0.01
+
+## 3. 기각역 설정
+## Z0 < -Z0.005 or Z0 > Z0.005
+
+## 4. 검정 통계량 계산
+result_var <- var.test(sweing, finishing, conf.level = 0.99)
+result_var
+
+## 5. 결론 도출
+if(result_var$p.value < alpha_var) {
+  print('검정 수행 결과 귀무 가설 기각한다.')
+} else {
+  print('검정 수행 결과 귀무 가설 채택한다.')
+}
 ```
 
 <br>
@@ -244,11 +278,17 @@ var.test(sweing, finishing, conf.level = 0.99)
 * 부서별 전체 데이터 중 목표 생산성 점수가 실제 생산성 점수를 초과하는 비율이 같은지 비교할 것
 
 ```{r no_6}
-## 1. 모평균 가설 검정
+## 1. 가설 검정
 ## H0 : 부서관계 없이 실제 생산성 점수가 목표 생산성 점수 초과하는 비율이 같다.
 ## H1 : 부서별로 실제 생산성 점수가 목표 생산성 점수 초과하는 비율이 다르다.
-## 유의수준 설정 (a = 0.05)
 
+## 2. 유의수준 설정 (a = 0.05)
+alpha_prop <- 0.05
+
+## 3. 기각역 설정
+## Z < -Z0.0025 or Z > Z0.0025
+
+## 4. 검정 통계량 계산
 dat_actual <- split(dat$actual_productivity, dat$department)
 dat_target <- split(dat$targeted_productivity, dat$department)
 
@@ -259,7 +299,32 @@ np <- sapply(1:length(dat_actual), function(x) {
   return(sum(actual > target))
 })
 
-prop.test(np, ndat)
+result_prop <- prop.test(np, ndat)
+result_prop
+
+## 5. 결론 도출
+if(result_prop$p.value < alpha_prop) {
+  print('검정 수행 결과 귀무 가설 기각한다.')
+  print('즉, 부서별 전체 데이터 중 목표 생산성 점수가 실제 생산성 점수를 초과하는 비율이 다르다')
+} else {
+  print('검정 수행 결과 귀무 가설 채택한다.')
+}
+
+## 부서별 달성 비율 차이에 대한 신뢰 구간 산출
+##result_prop$conf.int[1]
+##result_prop$conf.int[2]
+cal_ci <- function(np, ndat) {
+  p1 <- np[1] / ndat[1]
+  p2 <- np[2] / ndat[2]
+
+  se <- sqrt((p1*(1-p1))/ndat[1] + (p2*(1-p2))/ndat[2])
+  ci <- (p1-p2+c(-1,1)*1.96*se)
+  
+  print(paste('달성 비율 차이에 대한 95% 신뢰구간은 ', ci[1], ', ', ci[2], '입니다.'))
+}
+
+cal_ci(np, ndat)
+
 ```
 
 <br>
@@ -272,29 +337,43 @@ prop.test(np, ndat)
 
 
 ```{r no_7}
-## 1. 모평균 가설 검정
+## 1. 가설 검정
 ## H0 : 생산 공정에 투입되는 인원이 요일에 관계없이 동일하다.
 ## H1 : 생산 공정에 투입되는 인원이 요일별로 다르다.
-## 유의수준 설정 (a = 0.05)
-tapply(dat$team, dat$day, mean)
 
-dat_table <- function(x){
-  ob <- table(x)
-  ex <- rep(mean(ob), length(ob))
-  chisq.test(rbind(ob,ex))
-}
+## 2. 유의수준 설정 (a = 0.05)
+alpha_chi <- 0.05
 
-chisq_test <- print(dat_table(dat$day))
+## 3. 기각역 설정
+## Z < z0.05
 
-#if (chi_test$p.value < 0.05) {
-#  cat(paste('##############', colnames(dat)[i],'##############/n'))
- # print(chi_test)
+## 4. 검정 통계량 계산
+## 요일별 평균적인 투입 인원 산출
+team_mean <- tapply(dat$team, dat$day, mean)
+## 요일, 인원 두 변수에 대한 이차분할표 생성
+team_table <- table(dat$team, dat$day)
+
+result_chi <- chisq.test(team_table)
+result_chi
+
+#dat_table <- function(x){
+#  ob <- table(x)
+#  ex <- rep(mean(ob), length(ob))
+#  chisq.test(rbind(ob,ex))
 #}
+#chisq_test <- print(dat_table(dat$day))
+
+## 5. 결론 도출
+if(result_chi$p.value < alpha_chi) {
+  print('검정 수행 결과 귀무 가설 기각한다.')
+} else {
+  print('검정 수행 결과 귀무 가설 채택한다.')
+}
 
 ```
 
 
-d<br>
+<br>
 <br>
 
 #### 8. 초과근무 시간 (over_time)과 성과급 (incentive)이 연관성이 있는지 가설검정을 통하여 확인하고자 한다. 신뢰수준 90%에서 가설검정을 수행하고, 이에 대한 결론을 도출하시오. (15점)
@@ -304,6 +383,7 @@ d<br>
 * 검정을 위한 테이블은 5행 5열로 구성할 것
 
 ```{r no_8}
+options(scipen = 100)
 # 이상치 배제를 위한 데이터 전처리 진행
 dat <- dat[!(dat$incentive > 80 ), ]
 dat <- dat[!(dat$over_time > 8000 ), ]
@@ -313,17 +393,34 @@ grp_incen <- function(x){
   cut(x,breaks=c(0, 16, 32, 48, 64, 80), include.lowest=T)
 }
 grp_over <- function(x){
-  cut(x,breaks=c(0, 1600, 3200, 4800, 6400, 8000), include.lowest=T)
+  cut(x,breaks=c(0, 1600, 3200, 4800, 6400, 800), include.lowest=T)
 }
 dat$incentive <- grp_incen(dat$incentive)
 dat$over_time <- grp_over(dat$over_time)
 
-## 1. 모평균 가설 검정
+## 1. 가설 검정
 ## H0 : 초과근무 시간 (over_time)과 성과급 (incentive) 변수 사이에는 연관성이 없다.
 ## H1 : 초과근무 시간 (over_time)과 성과급 (incentive) 변수 사이에는 연관성이 있다.
-## 2. 유의수준 설정 (a = 0.1)
 
-chi_test <- chisq.test(table(dat$over_time, dat$incentive))
-print(chi_test)
+## 2. 유의수준 설정 (a = 0.1)
+alpha_chi2 <- 0.1
+
+## 3. 기각역 설정
+## Z < Z0.1
+
+## 4. 검정 통계량 계산
+chi_table <- table(dat$over_time, dat$incentive)
+chi_table
+result_chi2 <- chisq.test(chi_table)
+result_chi2
+
+## 5. 결론 도출
+if(result_chi2$p.value < alpha_chi2) {
+  print('검정 수행 결과 귀무 가설 기각한다.')
+} else {
+  print('검정 수행 결과 귀무 가설 채택한다.')
+}
 ```
+
+
 
